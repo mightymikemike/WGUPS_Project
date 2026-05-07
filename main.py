@@ -91,7 +91,24 @@ def load_distances(filepath):
     return distances, addresses
 
 ### Load Packages ###
-
+# Uses package csv #
+def load_packages(filepath, hash_table):
+    with open(filepath) as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            pkg = Package(
+                id=row[0],
+                address=row[1],
+                city=row[2],
+                state=row[3],
+                zip_code=row[4],
+                deadline=row[5],
+                weight=row[6],
+                notes=row[7] if len(row) > 7 else ""
+            )
+            hash_table.insert(pkg.id, pkg)
 
 ### Distance Lookup ###
 
