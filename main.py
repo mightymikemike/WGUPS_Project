@@ -64,7 +64,15 @@ class Package:
                 f"| Weight: {self.weight:<4} | Status: {self.status}") ##Double check this aligns
 
 ### Truck ###
-
+class Truck:
+    def __init__(self, truck_id, departure_time):
+        self.truck_id = truck_id
+        self.packages = []                      #list of package ids for packages on current truck
+        self.mileage = 0.0
+        self.current_location = "Hub"
+        self.time = departure_time
+        self.departure_time = departure_time
+        self.speed = 18                         #mph
 
 ### Load Distances ###
 
