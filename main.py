@@ -111,5 +111,33 @@ def load_packages(filepath, hash_table):
             hash_table.insert(pkg.id, pkg)
 
 ### Distance Lookup ###
+# Tries direct lookup first (get_distance) #
+# Tries a fuzzy match (best_match) if addresses don't exactly match #
+def get_distance(addr1, addr2, distances, address_list):
+    if (addr1, addr2) in distances:
+        return distances[(addr1, addr2)]
 
+    def best_match(target):
+        target_clean = target.lower(). replace(",", "").replace(".", "").replace("#", "")
+        best = None
+        best_score = 0
+        for a in address_list:
+            a_clean = a.lower().replace(",", "").replace(".", "").replace("#", "")
+            score = sum(word in a_clean for word in target_clean.split())
+            if score > best_score:
+                best_score = score
+                best = a
+        return best
+
+    key1 = best_match(addr1)
+    key2 = best_match(addr2)
+    return distances.get((key1, key2), 0.0)
+
+### Nearest Neighbor Routing ###
+
+
+### Interface
+
+
+### Main
 
