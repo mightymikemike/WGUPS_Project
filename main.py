@@ -178,7 +178,71 @@ def deliver_packages(truck, hash_table, distances, address_list):
     truck.current_location = "HUB"
 
 ### Interface
+# Displays status of all packages at a selected time #
+def run_interface(hash_table, trucks):
+    print("\n" + "="*60)
+    print("   WGUPS PACKAGE DELIVERY STATUS INTERFACE")
+    print("="*60)
 
+    total_miles = sum(t.mileage for t in trucks)
+    print(f"\nTotal mileage traveled by all trucks: {total_miles:.2f} miles")
+    for t in trucks:
+        print(f"  Truck {t.truck_id}: {t.mileage:.2f} miles")
+
+    while True:
+        print("n\Options:")
+        print("  1  -  Check status of all packages at a specific time")
+        print("  2  -  Look up a single package by ID")
+        print("  3  -  Exit")
+        choice = input("Enter Choice: ").strip()
+
+        if choice == "1":
+            time_input = input("Enter time (e.g. 9:00 AM or 13:00): ").strip()
+            try:
+                try: #12 and 24-hour format
+                    check_time = datetime.datetime.strptime(time_input, "%I:%M %p").replace(year=2000, month=1, day=1)
+                except ValueError:
+                    check_time = datetime.datetime.strptime(time_input, "%H:%M").replace(year=2000, month=1, day=1)
+
+                print(f"\n{'='*60}")
+                print(f"Package status at {check_time.strftime('%I:%M %p')}")
+                print(f"{'='*60}")
+                print(f"{'ID':<4} {'Address':<42} {'Deadline':<10} {'Weight':<7} {'Status'}")
+                print("-"*100)
+
+                for pkg_id in range(1, 41):
+                    pkg = hash_table.lookup(pkg_id)
+                    if pkg: #package 9
+                        display_addr = pkg.address
+                        if pkg.id == 9 and check_time < datetime.datetime(2000, 1, 1, 10, 20):
+                            display_addr = "300 State St (address pending correction"
+                        status = pkg.update_status(check_time)
+                        print(f"{pkg.id:<4} {display_addr:<42} {pkg.deadline:<10} {pkg.weight:<7} {status}")
+
+            except ValueError:
+                print("Invalid time format. Try '9:00 AM' or '09:00'.")
+
+        elif choice == "2":
+             try:
+                 pkg_id = int(input("Enter package ID (1 - 40): ").strip())
+                 pkg = hash_table.lookup(pkg_id)
+                 if pkg:
+                     print(f"\nPackage {pkg.id}:")
+                     print(f"   Address:   {pkg.address}, {pkg.city}, {pkg.state}, {pkg.zip_code}")
+                     print(f"   Deadline:   {pkg.deadline}")
+                     print(f"   Weight:   {pkg.wight} kg")
+                     print(f"   Notes:   {pkg.notes if pkg.notes else 'None'}")
+                     print(f"   Status:   {pkg.status}")
+                 else:
+                     print("Package not found.")
+             except ValueError:
+                     print("Please enter a valid numeric package ID.")
+
+        elif choice == "3":
+             print("Exiting. Goodbye")
+             break
+        else:
+             print("Invalid choice.")
 
 ### Main
 
