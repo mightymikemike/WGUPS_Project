@@ -134,7 +134,48 @@ def get_distance(addr1, addr2, distances, address_list):
     return distances.get((key1, key2), 0.0)
 
 ### Nearest Neighbor Routing ###
+def deliver_packages(truck, hash_table, distances, address_list):
+    undelivered = list(truck.packages)
 
+    while undelivered:
+        nearest_pkg_id = None
+        nearest_dist = float('inf')
+
+        for pkg_id in undelivered:
+            pkg = hash_table.lookup(pkg_id)
+
+            #Deal with package9 wrong address
+            if pkg.id == 9:
+                corrected_time = datetime.datetime(2000, 1, 1, 10, 20)
+                if truck.time < corrected_time:
+                    continue
+
+            dist = get_distance(truck.current_location, pkg.address, distances, address_list)
+            if dist < nearest_dist:
+                nearest_dist = dist
+                nearest_pkg_id = pkg_id
+
+        #advance time if no valid packages found
+        if nearest_pkg_id is None:
+            truck.time = datetime.datetime(2000, 1, 1, 10, 20)
+            continue
+
+        #travel to selected package
+        pkg = hash_table.lookup(nearest_pkg_id)
+        travel_time = nearest_dist / truck.speed
+        truck.time += datetime.timedelta(hours=travel_time)
+        truck.mileage += nearest_dist
+        truck.current_location = pkg.address
+
+        #mark package as delivered
+        pkg.status = f"Delivered at {truck.time.strftime('%I:%M %p')}"
+        pkg.delivery_time = truck.time
+        undelivered.remove(nearest_pkg_id)
+
+    #retrns truck to hub after all deliveries
+    hub_dist = get_distance(truck.current_location, "HUB", distances, address_list)
+    truck.mileage += hub_dist
+    truck.current_location = "HUB"
 
 ### Interface
 
