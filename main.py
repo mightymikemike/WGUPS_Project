@@ -75,7 +75,20 @@ class Truck:
         self.speed = 18                         #mph
 
 ### Load Distances ###
-
+# Uses distance csv #
+def load_distances(filepath):
+    distances = {}
+    with open(filepath) as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        addresses = header[1:]
+        for row in reader:
+            from_addr = row[0]
+            for j, dist in enumerate(row[1:]):
+                to_addr = addresses[j]
+                distances[(from_addr, to_addr)] = float(dist)
+                distances[(to_addr, from_addr)] = float(dist)
+    return distances, addresses
 
 ### Load Packages ###
 
