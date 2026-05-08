@@ -1,11 +1,15 @@
 # Student ID: 011877111
+# WGU C950 - Task 2 (WGUPS Routing Program)
+# Michael Johnson (mjo4731)
 
 import csv
 import datetime
 
 ### Hash Table ###
+# Custom hash table using chaining to handle collisions
+# Package ID is the key, each bucket a list of key, value pairs
 class HashTable:
-    #init table w/ empty bucket lists
+    #init table w/ one empty list per bucket
     def __init__(self, capacity=40):
         self.capacity = capacity
         self.table = [[] for _ in range(self.capacity)]
@@ -16,16 +20,19 @@ class HashTable:
         return int(key) % self.capacity
 
     #insert or update package in hash table w/ package ID as key
+    #if key already exists in bucket, its updated in place
+    #or new key, value pair is appended ot bucket list
     def insert(self, package_id, package):
         index = self._hash(package_id)
         bucket = self.table[index]
         for i, (k, v) in enumerate(bucket):
             if k == package_id:
-                bucket[i] = (package_id, package)
+                bucket[i] = (package_id, package) #update existing entry
                 return
-        bucket.append((package_id, package))
+        bucket.append((package_id, package)) #add new entry
 
-    #need to def lookup
+    #lookup package by its id, hashes key to find correct bucket, then searches bucket list for a matching key
+    #returns the package object if found, or None if not found
     def lookup(self, package_id):
         index = self._hash(package_id)
         bucket = self.table[index]
@@ -35,6 +42,9 @@ class HashTable:
         return None
 
 ### Package ###
+# Stores all delivery data for a single package
+# Each field maps directly to a column in the WGUPS Package File
+# Status and delivery time are updated by routing algorithm as deliveries occur
 class Package:
     def __init__(self, id, address, city, state, zip_code, deadline, weight, notes):
         self.id = int(id)
@@ -45,11 +55,12 @@ class Package:
         self.deadline = deadline.strip()
         self.weight = weight.strip()
         self.notes = notes.strip()
-        self.status = "At Hub"          #initial status
+        self.status = "At Hub"          #initial status, all packages start here
         self.delivery_time = None       #set when delivered
-        self.departure_time = None      #set after departure
+        self.departure_time = None      #set after truck departs
 
-    #return status based on check time
+    #return status for specified time
+    #this allows the interface to report accurate status, even after the simulation is complete
     def update_status(self, check_time):
         if self.departure_time and check_time < self.departure_time:
             return "At Hub"
@@ -63,43 +74,47 @@ class Package:
                 f"| Weight: {self.weight:<4} | Status: {self.status}") ##Double check this aligns
 
 ### Truck ###
+# Delivery truck tracking location, mileage, time, and loaded packages
+# Two drivers available, so max of 2 trucks delivering packages at a time
 class Truck:
     def __init__(self, truck_id, departure_time):
         self.truck_id = truck_id
         self.packages = []                      #list of package ids for packages on current truck
         self.mileage = 0.0
         self.current_location = "HUB"
-        self.time = departure_time
-        self.departure_time = departure_time
-        self.speed = 18                         #mph
+        self.time = departure_time              #current simulation time, which increases as the truck travels
+        self.departure_time = departure_time    #recorded so packages can report "At HUB" correctly
+        self.speed = 18                         #average speed in mph
 
 ### Load Distances ###
-# Uses distance csv #
+# Uses distances.csv, and builds a dictionary for fast lookup
+# Both directions stored (since distances are bidirectional
 def load_distances(filepath):
     distances = {}
     with open(filepath) as f:
         reader = csv.reader(f)
         header = next(reader)
-        addresses = header[1:]
+        addresses = header[1:]                                  #first column is row labels, rest are destination addresses
         for row in reader:
             from_addr = row[0]
-            if not from_addr.strip(): #skip empty rows
+            if not from_addr.strip():                           #skip empty rows
                 continue
             for j, dist in enumerate(row[1:]):
-                if dist.strip() == "": #skip empty cells
+                if dist.strip() == "":                          #skip empty cells
                     continue
                 to_addr = addresses[j]
                 distances[(from_addr, to_addr)] = float(dist)
-                distances[(to_addr, from_addr)] = float(dist)
+                distances[(to_addr, from_addr)] = float(dist)   #stores both directions
     return distances, addresses
 
 ### Load Packages ###
-# Uses package csv #
+# Uses packages.csv, creates a Package object for each row
+# Each package inserted into hash table using id as key
 def load_packages(filepath, hash_table):
     with open(filepath) as f:
         reader = csv.reader(f)
         for row in reader:
-            if not row or not row[0].strip():
+            if not row or not row[0].strip(): #skip blank rows
                 continue
             pkg = Package(
                 id=row[0],
@@ -114,12 +129,16 @@ def load_packages(filepath, hash_table):
             hash_table.insert(pkg.id, pkg)
 
 ### Distance Lookup ###
-# Tries direct lookup first (get_distance) #
-# Tries a fuzzy match (best_match) if addresses don't exactly match #
+# Returns distance between two address strings
+# Tries direct lookup first
+# Tries a fuzzy match (best_match) if addresses don't exactly match
 def get_distance(addr1, addr2, distances, address_list):
+    #direct lookup
     if (addr1, addr2) in distances:
         return distances[(addr1, addr2)]
 
+    #fuzzy match, cleans both strings and counts how many words from target appear in each address
+    #option with most matching words is selected
     def best_match(target):
         target_clean = target.lower(). replace(",", "").replace(".", "").replace("#", "")
         best = None
@@ -134,9 +153,13 @@ def get_distance(addr1, addr2, distances, address_list):
 
     key1 = best_match(addr1)
     key2 = best_match(addr2)
-    return distances.get((key1, key2), 0.0)
+    return distances.get((key1, key2), 0.0) #returns 0 if no match found
 
 ### Nearest Neighbor Routing ###
+# Delivers all packages on a truck using nearest neighbor algorithm
+# At each step, algorithm finds undelivered package closest to trucks current location then drives there
+# Does this until all packages are delivered
+# Truck time and mileage updated with each delivery
 def deliver_packages(truck, hash_table, distances, address_list):
     undelivered = list(truck.packages)
 
@@ -147,7 +170,7 @@ def deliver_packages(truck, hash_table, distances, address_list):
         for pkg_id in undelivered:
             pkg = hash_table.lookup(pkg_id)
 
-            #Deal with package9 wrong address
+            #skips package #9 if the address hasnt been corrected
             if pkg.id == 9:
                 corrected_time = datetime.datetime(2000, 1, 1, 10, 20)
                 if truck.time < corrected_time:
@@ -158,35 +181,39 @@ def deliver_packages(truck, hash_table, distances, address_list):
                 nearest_dist = dist
                 nearest_pkg_id = pkg_id
 
-        #advance time if no valid packages found
+        #if no valid packages found, skip time to 10:20 so package#9's address will be corrected
         if nearest_pkg_id is None:
             truck.time = datetime.datetime(2000, 1, 1, 10, 20)
             continue
 
-        #travel to selected package
+        #travel to nearest package and deliver it
         pkg = hash_table.lookup(nearest_pkg_id)
         travel_time = nearest_dist / truck.speed
         truck.time += datetime.timedelta(hours=travel_time)
         truck.mileage += nearest_dist
         truck.current_location = pkg.address
 
-        #mark package as delivered
+        #mark package as delivered, with current simulation time
         pkg.status = f"Delivered at {truck.time.strftime('%I:%M %p')}"
         pkg.delivery_time = truck.time
         undelivered.remove(nearest_pkg_id)
 
-    #retrns truck to hub after all deliveries
+    #returns truck to hub after all deliveries and adds return mileage
     hub_dist = get_distance(truck.current_location, "HUB", distances, address_list)
     truck.mileage += hub_dist
     truck.current_location = "HUB"
 
 ### Interface ###
-# Displays status of all packages at a selected time #
+# Uses CLI to:
+# Check status of all 40 packages at any point in time
+# Lookup single package by ID
+# View total mileage for all trucks
 def run_interface(hash_table, trucks):
     print("\n" + "="*60)
     print("   WGUPS PACKAGE DELIVERY STATUS INTERFACE")
     print("="*60)
 
+    #display total mileage summary at startup
     total_miles = sum(t.mileage for t in trucks)
     print(f"\nTotal mileage traveled by all trucks: {total_miles:.2f} miles")
     for t in trucks:
@@ -210,17 +237,18 @@ def run_interface(hash_table, trucks):
                 print(f"\n{'='*60}")
                 print(f"Package status at {check_time.strftime('%I:%M %p')}")
                 print(f"{'='*60}")
-                print(f"{'ID':<4} {'Address':<42} {'Deadline':<10} {'Weight':<7} {'Status'}")
-                print("-"*100)
+                print(f"{'ID':<4} {'Address':<42} {'City': <20} {'Zip':<7} {'Deadline':<10} {'Weight':<7} {'Status'}")
+                print("-"*120)
 
                 for pkg_id in range(1, 41):
                     pkg = hash_table.lookup(pkg_id)
-                    if pkg: #package 9
+                    if pkg:
                         display_addr = pkg.address
+                        #hid package#9's correct address until 10:20 AM
                         if pkg.id == 9 and check_time < datetime.datetime(2000, 1, 1, 10, 20):
                             display_addr = "300 State St (address pending correction"
                         status = pkg.update_status(check_time)
-                        print(f"{pkg.id:<4} {display_addr:<42} {pkg.deadline:<10} {pkg.weight:<7} {status}")
+                        print(f"{pkg.id:<4} {display_addr:<42} {pkg.city:<20} {pkg.zip_code:<7} {pkg.deadline:<10} {pkg.weight:<7} {status}")
 
             except ValueError:
                 print("Invalid time format. Try '9:00 AM' or '09:00'.")
@@ -248,8 +276,9 @@ def run_interface(hash_table, trucks):
              print("Invalid choice.")
 
 ### Main ###
+# Loads data, assigns packages to trucks, runs delivery simulation, launches UI
 def main():
-    #load distance table and package data
+    #load distance table and package data from csv files
     distances, address_list = load_distances("distances.csv")
     hash_table = HashTable(capacity=40)
     load_packages("packages.csv", hash_table)
@@ -269,11 +298,12 @@ def main():
     truck2.packages = [3, 5, 8, 10, 18, 21, 26, 33, 35, 36, 38, 39]
 
     #Truck 3 (departs at 9:05 AM)
-    #handles delayed packages that dont arrive until 9:05 AM
+    #handles delayed packages that dont arrive at hub until 9:05 AM
+    #handles package#9 with the wrong address
     truck3 = Truck(3, t905)
     truck3.packages = [2, 4, 6, 7, 9, 11, 12, 17, 22, 23, 24, 25, 27, 28, 32]
 
-    #set departure time on each package
+    #record each trucks departure time on its packages so interface can properly report when its at the hub
     all_trucks = [truck1, truck2, truck3]
     for truck in all_trucks:
         for pkg_id in truck.packages:
@@ -285,7 +315,7 @@ def main():
     for truck in all_trucks:
         deliver_packages(truck, hash_table, distances, address_list)
 
-    #print summary
+    #print delivery summary
     print("\nDelivery simulation complete.")
     total = sum(t.mileage for t in all_trucks)
     for truck in all_trucks:
