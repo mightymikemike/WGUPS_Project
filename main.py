@@ -4,7 +4,6 @@ import csv
 import datetime
 
 ### Hash Table ###
-
 class HashTable:
     #init table w/ empty bucket lists
     def __init__(self, capacity=40):
@@ -69,7 +68,7 @@ class Truck:
         self.truck_id = truck_id
         self.packages = []                      #list of package ids for packages on current truck
         self.mileage = 0.0
-        self.current_location = "Hub"
+        self.current_location = "HUB"
         self.time = departure_time
         self.departure_time = departure_time
         self.speed = 18                         #mph
@@ -84,7 +83,11 @@ def load_distances(filepath):
         addresses = header[1:]
         for row in reader:
             from_addr = row[0]
+            if not from_addr.strip(): #skip empty rows
+                continue
             for j, dist in enumerate(row[1:]):
+                if dist.strip() == "": #skip empty cells
+                    continue
                 to_addr = addresses[j]
                 distances[(from_addr, to_addr)] = float(dist)
                 distances[(to_addr, from_addr)] = float(dist)
@@ -177,7 +180,7 @@ def deliver_packages(truck, hash_table, distances, address_list):
     truck.mileage += hub_dist
     truck.current_location = "HUB"
 
-### Interface
+### Interface ###
 # Displays status of all packages at a selected time #
 def run_interface(hash_table, trucks):
     print("\n" + "="*60)
@@ -190,7 +193,7 @@ def run_interface(hash_table, trucks):
         print(f"  Truck {t.truck_id}: {t.mileage:.2f} miles")
 
     while True:
-        print("n\Options:")
+        print("\nOptions:")
         print("  1  -  Check status of all packages at a specific time")
         print("  2  -  Look up a single package by ID")
         print("  3  -  Exit")
@@ -230,7 +233,7 @@ def run_interface(hash_table, trucks):
                      print(f"\nPackage {pkg.id}:")
                      print(f"   Address:   {pkg.address}, {pkg.city}, {pkg.state}, {pkg.zip_code}")
                      print(f"   Deadline:   {pkg.deadline}")
-                     print(f"   Weight:   {pkg.wight} kg")
+                     print(f"   Weight:   {pkg.weight} kg")
                      print(f"   Notes:   {pkg.notes if pkg.notes else 'None'}")
                      print(f"   Status:   {pkg.status}")
                  else:
@@ -244,5 +247,67 @@ def run_interface(hash_table, trucks):
         else:
              print("Invalid choice.")
 
-### Main
+### Main ###
+def main():
+    #load distance table and package data
+    distances, address_list = load_distances("distances.csv")
+    hash_table = HashTable(capacity=40)
+    load_packages("packages.csv", hash_table)
 
+    #set departure times using fixed reference date
+    t800 = datetime.datetime(2000, 1, 1, 8, 0)
+    t905 = datetime.datetime(2000, 1, 1, 9, 5)
+
+    #Truck 1 (departs at 8 AM)
+    #prioritizes early deadlines and packages that need to be delivered together
+    truck1 = Truck(1, t800)
+    truck1.packages = [1, 13, 14, 15, 16, 19, 20, 29, 30, 31, 34, 37, 40]
+
+    #Truck 2 (departs at 8 AM)
+    #handles packages that can only go on truck 2
+    truck2 = Truck(2, t800)
+    truck2.packages = [3, 5, 8, 10, 18, 21, 26, 33, 35, 36, 38, 39]
+
+    #Truck 3 (departs at 9:05 AM)
+    #handles delayed packages that dont arrive until 9:05 AM
+    truck3 = Truck(3, t905)
+    truck3.packages = [2, 4, 6, 7, 9, 11, 12, 17, 22, 23, 24, 25, 27, 28, 32]
+
+    #set departure time on each package
+    all_trucks = [truck1, truck2, truck3]
+    for truck in all_trucks:
+        for pkg_id in truck.packages:
+            pkg = hash_table.lookup((pkg_id))
+            if pkg:
+                pkg.departure_time = truck.departure_time
+
+    #run nearest neighbor for each truck
+    for truck in all_trucks:
+        deliver_packages(truck, hash_table, distances, address_list)
+
+    #print summary
+    print("\nDelivery simulation complete.")
+    total = sum(t.mileage for t in all_trucks)
+    for truck in all_trucks:
+        print(f"Truck {truck.truck_id} mileage: {truck.mileage:.2f} miles")
+    print(f"Total mileage: {total:.2f} miles")
+
+    #verify all deadlines are met
+    print("\nDeadline check:")
+    all_met = True
+    for pkg_id in range(1,41):
+        pkg = hash_table.lookup(pkg_id)
+        if pkg and pkg.deadline != "EOD" and pkg.delivery_time:
+            deadline_time = datetime.datetime.strptime(pkg.deadline, '%I:%M %p').replace(year=2000, month=1, day=1)
+            if pkg.delivery_time > deadline_time:
+                print(f"  MISSED: Package {pkg_id} delivered at {pkg.delivery_time.strftime('%I:%M %p')}, deadline was {pkg.deadline}")
+                all_met = False
+    if all_met:
+        print("  All deadlines met.")
+
+    #launch UI
+    run_interface(hash_table, all_trucks)
+
+
+if __name__ == '__main__':
+    main()
